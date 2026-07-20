@@ -1,0 +1,19 @@
+# systemd unit template for the palsave-api service.
+# Installed to /etc/systemd/system/palsave-api.service by deploy/setup.sh, which
+# substitutes __PALSAVE_API_USER__ and __PALSAVE_API_DIR__ for the values it
+# was run with.
+[Unit]
+Description=palsave-api Palworld save-parsing service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__PALSAVE_API_USER__
+WorkingDirectory=__PALSAVE_API_DIR__
+ExecStart=__PALSAVE_API_DIR__/.venv/bin/python __PALSAVE_API_DIR__/main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
