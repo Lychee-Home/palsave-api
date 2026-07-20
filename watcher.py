@@ -24,6 +24,7 @@ import state as state_module
 
 FOLDER_NAME_FORMAT = "%Y.%m.%d-%H.%M.%S"
 POLL_SECONDS = 60
+SNAPSHOT_RETENTION = datetime.timedelta(hours=1)
 
 log = logging.getLogger("palsave_api.watcher")
 
@@ -51,6 +52,28 @@ def archive_snapshot(sav_path: Path, archive_dir: Path, folder_name: str) -> Pat
     return dest
 
 
+def prune_snapshots(archive_dir: Path, protect_path) -> None:
+    """Delete archived snapshots older than SNAPSHOT_RETENTION, except the one the next diff
+    still needs (protect_path, typically state["last_snapshot_path"])."""
+    if not archive_dir.exists():
+        return
+    cutoff = datetime.datetime.now() - SNAPSHOT_RETENTION
+    protect = Path(protect_path).resolve() if protect_path else None
+    for sav_path in archive_dir.glob("*.sav"):
+        try:
+            timestamp = datetime.datetime.strptime(sav_path.stem, FOLDER_NAME_FORMAT)
+        except ValueError:
+            continue  # not one of ours, leave it alone
+        if timestamp >= cutoff:
+            continue
+        if protect is not None and sav_path.resolve() == protect:
+            continue
+        try:
+            sav_path.unlink()
+        except OSError:
+            log.exception("failed to prune %s", sav_path)
+
+
 def _load_sav(path: Path) -> dict:
     data = path.read_bytes()
     gvas_data = decompress.decompress_sav(data)
@@ -59,54 +82,57 @@ def _load_sav(path: Path) -> dict:
 
 def process_new_backups(backup_root: Path, archive_dir: Path, state_path: Path) -> None:
     state = state_module.load_state(state_path)
-    folders = list_backup_folders(backup_root)
-    if not folders:
-        return
-
-    if state["last_processed"] is None:
-        # First ever run: seed the baseline from the latest existing backup
-        # rather than replaying the server's whole backup history as if it
-        # all just happened.
-        timestamp, folder = folders[-1]
-        sav_path = folder / "Level.sav"
-        if not sav_path.exists():
-            log.warning("[%s] skip: no Level.sav found", folder.name)
+    try:
+        folders = list_backup_folders(backup_root)
+        if not folders:
             return
-        archived = archive_snapshot(sav_path, archive_dir, folder.name)
-        state["last_snapshot_path"] = str(archived)
-        log.info("[%s] baseline snapshot (first run), nothing to diff against yet", folder.name)
-        state["last_processed"] = folder.name
-        state_module.save_state(state_path, state)
-        return
 
-    new_folders = [(ts, f) for ts, f in folders if f.name > state["last_processed"]]
-
-    for timestamp, folder in new_folders:
-        sav_path = folder / "Level.sav"
-        if not sav_path.exists():
-            log.warning("[%s] skip: no Level.sav found", folder.name)
-            continue
-
-        try:
+        if state["last_processed"] is None:
+            # First ever run: seed the baseline from the latest existing backup
+            # rather than replaying the server's whole backup history as if it
+            # all just happened.
+            timestamp, folder = folders[-1]
+            sav_path = folder / "Level.sav"
+            if not sav_path.exists():
+                log.warning("[%s] skip: no Level.sav found", folder.name)
+                return
             archived = archive_snapshot(sav_path, archive_dir, folder.name)
-        except OSError:
-            log.exception("[%s] failed to archive, will retry next cycle", folder.name)
-            break  # leave state untouched so this folder is retried
+            state["last_snapshot_path"] = str(archived)
+            log.info("[%s] baseline snapshot (first run), nothing to diff against yet", folder.name)
+            state["last_processed"] = folder.name
+            state_module.save_state(state_path, state)
+            return
 
-        previous_path = state.get("last_snapshot_path")
-        try:
-            old_snapshot = _load_sav(Path(previous_path))
-            new_snapshot = _load_sav(archived)
-            new_events = diff.diff_new_pals(old_snapshot, new_snapshot)
-            for event in new_events:
-                event["snapshot"] = folder.name
-            state_module.append_events(state, new_events)
-        except Exception:
-            log.exception("[%s] failed to load/parse, skipping diff for this snapshot", folder.name)
+        new_folders = [(ts, f) for ts, f in folders if f.name > state["last_processed"]]
 
-        state["last_processed"] = folder.name
-        state["last_snapshot_path"] = str(archived)
-        state_module.save_state(state_path, state)
+        for timestamp, folder in new_folders:
+            sav_path = folder / "Level.sav"
+            if not sav_path.exists():
+                log.warning("[%s] skip: no Level.sav found", folder.name)
+                continue
+
+            try:
+                archived = archive_snapshot(sav_path, archive_dir, folder.name)
+            except OSError:
+                log.exception("[%s] failed to archive, will retry next cycle", folder.name)
+                break  # leave state untouched so this folder is retried
+
+            previous_path = state.get("last_snapshot_path")
+            try:
+                old_snapshot = _load_sav(Path(previous_path))
+                new_snapshot = _load_sav(archived)
+                new_events = diff.diff_new_pals(old_snapshot, new_snapshot)
+                for event in new_events:
+                    event["snapshot"] = folder.name
+                state_module.append_events(state, new_events)
+            except Exception:
+                log.exception("[%s] failed to load/parse, skipping diff for this snapshot", folder.name)
+
+            state["last_processed"] = folder.name
+            state["last_snapshot_path"] = str(archived)
+            state_module.save_state(state_path, state)
+    finally:
+        prune_snapshots(archive_dir, state.get("last_snapshot_path"))
 
 
 def run_forever(backup_root: Path, archive_dir: Path, state_path: Path) -> None:
