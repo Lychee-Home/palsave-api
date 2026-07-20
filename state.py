@@ -6,6 +6,7 @@ state.
 """
 
 import json
+import os
 from pathlib import Path
 
 DEFAULT_STATE = {
@@ -23,7 +24,9 @@ def load_state(state_path: Path) -> dict:
 
 
 def save_state(state_path: Path, state: dict) -> None:
-    state_path.write_text(json.dumps(state), encoding="utf-8")
+    tmp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(state), encoding="utf-8")
+    os.replace(tmp_path, state_path)
 
 
 def append_events(state: dict, new_events: list) -> None:

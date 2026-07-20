@@ -180,6 +180,29 @@ class TestProcessNewBackups(unittest.TestCase):
         self.assertEqual(state["last_processed"], "2026.01.02-00.00.00")
         self.assertEqual(state["events"], [])
 
+    def test_corrupt_zlib_body_advances_state_and_skips_diff(self):
+        # A save with a valid palsav header (correct "PlZ" magic, correct
+        # save_type) but a corrupt/truncated zlib body underneath. This
+        # raises zlib.error from decompress_sav's zlib.decompress call, not
+        # a ParseError -- the watcher must still not wedge on it.
+        write_backup_folder(self.root, "2026.01.01-00.00.00",
+                             build_gvas_with_pal("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", self.owner, 10))
+        process_new_backups(self.root, self.archive_dir, self.state_path)
+
+        raw = build_gvas_with_pal("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", self.owner, 20)
+        good_body = zlib.compress(raw)
+        corrupt_body = good_body[:len(good_body) // 2]  # truncated -> zlib.error on decompress
+        header = struct.pack("<II", len(raw), len(corrupt_body)) + b"PlZ" + struct.pack("<B", 0x31)
+        folder = self.root / "2026.01.02-00.00.00"
+        folder.mkdir()
+        (folder / "Level.sav").write_bytes(header + corrupt_body)
+
+        process_new_backups(self.root, self.archive_dir, self.state_path)
+
+        state = load_state(self.state_path)
+        self.assertEqual(state["last_processed"], "2026.01.02-00.00.00")
+        self.assertEqual(state["events"], [])
+
     def test_archive_failure_leaves_state_untouched(self):
         write_backup_folder(self.root, "2026.01.01-00.00.00",
                              build_gvas_with_pal("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", self.owner, 10))

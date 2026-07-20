@@ -59,6 +59,18 @@ class TestEventsEndpoint(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [])
 
+    def test_negative_limit_returns_empty_not_negative_slice(self):
+        save_state(config.STATE_PATH, {
+            "last_processed": "f", "last_snapshot_path": "s", "next_event_id": 4,
+            "events": [{"id": 1, "character_id": "A"}, {"id": 2, "character_id": "B"},
+                       {"id": 3, "character_id": "C"}],
+        })
+        import api
+        with TestClient(api.app) as client:
+            resp = client.get("/events/new-pals", params={"since": 0, "limit": -1})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), [])
+
     def test_corrupt_state_file_returns_500(self):
         config.STATE_PATH.write_text("not json", encoding="utf-8")
         import api

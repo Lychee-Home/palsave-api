@@ -21,7 +21,6 @@ import decompress
 import diff
 import gvas
 import state as state_module
-from binary_reader import ParseError
 
 FOLDER_NAME_FORMAT = "%Y.%m.%d-%H.%M.%S"
 POLL_SECONDS = 60
@@ -102,8 +101,8 @@ def process_new_backups(backup_root: Path, archive_dir: Path, state_path: Path) 
             for event in new_events:
                 event["snapshot"] = folder.name
             state_module.append_events(state, new_events)
-        except ParseError:
-            log.exception("[%s] failed to parse, skipping diff for this snapshot", folder.name)
+        except Exception:
+            log.exception("[%s] failed to load/parse, skipping diff for this snapshot", folder.name)
 
         state["last_processed"] = folder.name
         state["last_snapshot_path"] = str(archived)

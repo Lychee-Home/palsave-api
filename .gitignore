@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.env
+state.json
+snapshots/
+ooz/bin/*
+!ooz/bin/.gitkeep
+.idea/
+.claude/settings.local.json
+.claude/worktrees/

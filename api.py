@@ -31,6 +31,8 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/events/new-pals")
 def get_new_pals(since: int = 0, limit: int = 20):
+    since = max(0, since)
+    limit = max(0, limit)
     try:
         state = state_module.load_state(config.STATE_PATH)
     except (OSError, ValueError):
