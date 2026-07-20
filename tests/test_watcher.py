@@ -1,3 +1,4 @@
+import datetime
 import struct
 import tempfile
 import unittest
@@ -5,6 +6,7 @@ import zlib
 from pathlib import Path
 from unittest import mock
 
+import watcher
 from state import load_state
 from watcher import list_backup_folders, process_new_backups
 
@@ -112,6 +114,71 @@ def write_backup_folder(root: Path, name: str, gvas_bytes: bytes):
     (folder / "Level.sav").write_bytes(build_palsav(gvas_bytes))
 
 
+def _snapshot_name(age: datetime.timedelta) -> str:
+    when = datetime.datetime.now() - age
+    return when.strftime(watcher.FOLDER_NAME_FORMAT) + ".sav"
+
+
+class TestPruneSnapshots(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.archive_dir = Path(self.tmp.name) / "snapshots"
+        self.archive_dir.mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_deletes_old_snapshot(self):
+        old = self.archive_dir / _snapshot_name(datetime.timedelta(hours=2))
+        old.write_bytes(b"x")
+        watcher.prune_snapshots(self.archive_dir, None)
+        self.assertFalse(old.exists())
+
+    def test_keeps_recent_snapshot(self):
+        recent = self.archive_dir / _snapshot_name(datetime.timedelta(minutes=10))
+        recent.write_bytes(b"x")
+        watcher.prune_snapshots(self.archive_dir, None)
+        self.assertTrue(recent.exists())
+
+    def test_keeps_protected_snapshot_despite_age(self):
+        old = self.archive_dir / _snapshot_name(datetime.timedelta(hours=2))
+        old.write_bytes(b"x")
+        watcher.prune_snapshots(self.archive_dir, str(old))
+        self.assertTrue(old.exists())
+
+    def test_ignores_non_matching_filenames(self):
+        weird = self.archive_dir / "not-a-timestamp.sav"
+        weird.write_bytes(b"x")
+        readme = self.archive_dir / "README.txt"
+        readme.write_bytes(b"x")
+        watcher.prune_snapshots(self.archive_dir, None)
+        self.assertTrue(weird.exists())
+        self.assertTrue(readme.exists())
+
+    def test_failed_deletion_is_logged_and_others_still_pruned(self):
+        bad = self.archive_dir / _snapshot_name(datetime.timedelta(hours=2))
+        bad.write_bytes(b"x")
+        other_old = self.archive_dir / _snapshot_name(datetime.timedelta(hours=3))
+        other_old.write_bytes(b"x")
+
+        original_unlink = Path.unlink
+
+        def flaky_unlink(self_path, *args, **kwargs):
+            if self_path.name == bad.name:
+                raise OSError("simulated failure")
+            return original_unlink(self_path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", flaky_unlink):
+            watcher.prune_snapshots(self.archive_dir, None)
+
+        self.assertTrue(bad.exists())
+        self.assertFalse(other_old.exists())
+
+    def test_missing_archive_dir_is_noop(self):
+        missing = self.archive_dir / "does-not-exist"
+        watcher.prune_snapshots(missing, None)  # must not raise
+
+
 class TestListBackupFolders(unittest.TestCase):
     def test_lists_only_matching_folders_sorted(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -215,6 +282,18 @@ class TestProcessNewBackups(unittest.TestCase):
 
         state = load_state(self.state_path)
         self.assertEqual(state["last_processed"], "2026.01.01-00.00.00")
+
+    def test_process_new_backups_prunes_old_snapshots(self):
+        old_leftover = self.archive_dir / _snapshot_name(datetime.timedelta(hours=2))
+        self.archive_dir.mkdir(parents=True, exist_ok=True)
+        old_leftover.write_bytes(b"stale")
+
+        write_backup_folder(self.root, "2026.01.01-00.00.00",
+                             build_gvas_with_pal("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", self.owner, 10))
+        process_new_backups(self.root, self.archive_dir, self.state_path)
+
+        self.assertFalse(old_leftover.exists())
+        self.assertTrue((self.archive_dir / "2026.01.01-00.00.00.sav").exists())
 
 
 if __name__ == "__main__":
