@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This repo is a fresh scaffold — `main.py` is still PyCharm's default boilerplate. The real
-implementation is specified but not yet built. Before writing code here, read the full design spec
-at `docs/superpowers/specs/2026-07-20-palsave-api-design.md` — it is the authoritative source for
-architecture, configuration, error handling, and scope decisions; this file only summarizes it.
+The service is implemented: `binary_reader.py`, `decompress.py`, `gvas.py`, `diff.py`, `state.py`,
+`watcher.py`, `api.py`, and `main.py` per the design spec at
+`docs/superpowers/specs/2026-07-20-palsave-api-design.md`. `ooz/bin/libooz.so` still needs to be
+built on the Linux deployment host before Oodle-compressed ("PlM") saves can be decompressed there
+(see `decompress.py`'s module docstring for the build command) — zlib ("PlZ") saves work without it.
 
 ## What this service is
 
