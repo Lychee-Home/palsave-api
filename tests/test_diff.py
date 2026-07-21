@@ -130,6 +130,24 @@ class TestDiffNewPals(unittest.TestCase):
         })])
         self.assertEqual(diff_new_pals(old, new), [])
 
+    def test_acquired_at_converts_owned_time_ticks(self):
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "Lamball", "LastJumpedLocation": {"x": 0, "y": 0, "z": 0},
+            "OwnerPlayerUId": PLAYER_GUID, "OwnedTime": 639201312000000000,
+        })])
+        events = diff_new_pals(old, new)
+        self.assertEqual(events[0]["acquired_at"], "2026-07-20T08:00:00+00:00")
+
+    def test_acquired_at_none_when_owned_time_missing(self):
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "Lamball", "LastJumpedLocation": {"x": 0, "y": 0, "z": 0},
+            "OwnerPlayerUId": PLAYER_GUID,
+        })])
+        events = diff_new_pals(old, new)
+        self.assertIsNone(events[0]["acquired_at"])
+
     def test_missing_talents_default_to_zero(self):
         old = snapshot([])
         new = snapshot([entry("a", {
