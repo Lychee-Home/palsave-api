@@ -6,6 +6,8 @@ recap.py::diff_new_pals -- the notability-tier opinion (which catches are
 swee consumer, not here.
 """
 
+from pal_names import pal_name
+
 ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 
 
@@ -76,6 +78,7 @@ def diff_new_pals(old_snapshot: dict, new_snapshot: dict) -> list:
 
         events.append({
             "character_id": pal.get("CharacterID"),
+            "pal_name": pal_name(pal.get("CharacterID")),
             "level": pal.get("Level"),
             "talent_hp": pal.get("Talent_HP") or 0,
             "talent_shot": pal.get("Talent_Shot") or 0,

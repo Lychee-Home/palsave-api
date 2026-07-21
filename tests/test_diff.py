@@ -28,6 +28,24 @@ class TestDiffNewPals(unittest.TestCase):
         self.assertEqual(events[0]["level"], 20)
         self.assertEqual(events[0]["talent_hp"], 80)
 
+    def test_pal_name_maps_known_character_id(self):
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "SheepBall", "LastJumpedLocation": {"x": 1, "y": 2, "z": 3},
+            "OwnerPlayerUId": PLAYER_GUID,
+        })])
+        events = diff_new_pals(old, new)
+        self.assertEqual(events[0]["pal_name"], "Lamball")
+
+    def test_pal_name_falls_back_to_character_id_when_unmapped(self):
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "SomeFuturePal", "LastJumpedLocation": {"x": 1, "y": 2, "z": 3},
+            "OwnerPlayerUId": PLAYER_GUID,
+        })])
+        events = diff_new_pals(old, new)
+        self.assertEqual(events[0]["pal_name"], "SomeFuturePal")
+
     def test_new_hatched(self):
         old = snapshot([])
         new = snapshot([entry("a", {
