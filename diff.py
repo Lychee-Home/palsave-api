@@ -55,14 +55,14 @@ def diff_new_pals(old_snapshot: dict, new_snapshot: dict) -> list:
             continue
 
         old_pal = old_index.get(instance_id)
-        if old_pal is None:
-            is_new_acquisition = True
-        elif is_unowned(old_pal) and not is_unowned(pal):
-            # Defensive path: a wild pal that was already tracked (unowned)
-            # gets caught without getting a new InstanceId.
-            is_new_acquisition = True
-        else:
-            is_new_acquisition = False
+        was_unowned_or_absent = old_pal is None or is_unowned(old_pal)
+        # A brand-new InstanceId (old_pal is None) is not itself an
+        # acquisition -- wild pals can spawn into the world already present
+        # in CharacterSaveParameterMap, unowned, before anyone catches them.
+        # Only count it once the pal is actually owned, whether that's a
+        # brand-new owned entry or an existing unowned entry transitioning
+        # to owned without getting a new InstanceId.
+        is_new_acquisition = was_unowned_or_absent and not is_unowned(pal)
 
         if not is_new_acquisition:
             continue

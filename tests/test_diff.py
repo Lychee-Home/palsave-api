@@ -79,6 +79,25 @@ class TestDiffNewPals(unittest.TestCase):
         self.assertTrue(events[0]["is_rare_pal"])
         self.assertTrue(events[0]["is_awakening"])
 
+    def test_new_unowned_wild_spawn_is_not_an_event(self):
+        # A pal that spawns into the world (brand-new InstanceId) but hasn't
+        # been caught by anyone yet -- OwnerPlayerUId null/zero -- must not
+        # be reported as an "acquisition". Only a genuinely new InstanceId
+        # that is ALSO currently owned counts.
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "Chillet", "Level": 10, "LastJumpedLocation": {"x": 0, "y": 0, "z": 0},
+            "OwnerPlayerUId": ZERO_GUID,
+        })])
+        self.assertEqual(diff_new_pals(old, new), [])
+
+    def test_new_unowned_wild_spawn_with_null_owner_is_not_an_event(self):
+        old = snapshot([])
+        new = snapshot([entry("a", {
+            "CharacterID": "Chillet", "Level": 10, "LastJumpedLocation": {"x": 0, "y": 0, "z": 0},
+        })])
+        self.assertEqual(diff_new_pals(old, new), [])
+
     def test_missing_talents_default_to_zero(self):
         old = snapshot([])
         new = snapshot([entry("a", {
