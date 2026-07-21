@@ -6,9 +6,23 @@ recap.py::diff_new_pals -- the notability-tier opinion (which catches are
 swee consumer, not here.
 """
 
+import datetime
+
 from pal_names import pal_name
 
 ZERO_GUID = "00000000-0000-0000-0000-000000000000"
+
+# FDateTime ticks are 100ns intervals since 0001-01-01, in the host's own
+# wall-clock time. The deployment host's system clock is UTC.
+_TICKS_EPOCH = datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
+
+
+def ticks_to_datetime(ticks) -> str:
+    """Convert an OwnedTime-style FDateTime tick count to a UTC-aware
+    ISO-8601 timestamp string, or None if ticks is missing."""
+    if ticks is None:
+        return None
+    return (_TICKS_EPOCH + datetime.timedelta(microseconds=ticks / 10)).isoformat()
 
 
 def index_characters(snapshot: dict) -> dict:
@@ -87,5 +101,6 @@ def diff_new_pals(old_snapshot: dict, new_snapshot: dict) -> list:
             "owner_player_uid": pal.get("OwnerPlayerUId"),
             "is_rare_pal": bool(pal.get("IsRarePal")),
             "is_awakening": bool(pal.get("bIsAwakening")),
+            "acquired_at": ticks_to_datetime(pal.get("OwnedTime")),
         })
     return events
