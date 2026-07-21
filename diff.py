@@ -55,14 +55,21 @@ def diff_new_pals(old_snapshot: dict, new_snapshot: dict) -> list:
             continue
 
         old_pal = old_index.get(instance_id)
-        was_unowned_or_absent = old_pal is None or is_unowned(old_pal)
-        # A brand-new InstanceId (old_pal is None) is not itself an
-        # acquisition -- wild pals can spawn into the world already present
-        # in CharacterSaveParameterMap, unowned, before anyone catches them.
-        # Only count it once the pal is actually owned, whether that's a
-        # brand-new owned entry or an existing unowned entry transitioning
-        # to owned without getting a new InstanceId.
-        is_new_acquisition = was_unowned_or_absent and not is_unowned(pal)
+        if old_pal is None:
+            # A brand-new InstanceId is not itself an acquisition -- wild
+            # pals can spawn into the world already present in
+            # CharacterSaveParameterMap, unowned, before anyone catches them.
+            is_new_acquisition = not is_unowned(pal)
+        elif is_unowned(old_pal) and not is_unowned(pal):
+            # Defensive path: a wild pal that was already tracked (unowned)
+            # gets caught without getting a new InstanceId. But if the new
+            # owner already appears in OldOwnerPlayerUIds, this is a reclaim
+            # (e.g. Palbox round-trip nulls OwnerPlayerUId in between
+            # snapshots), not a fresh capture.
+            old_owners = old_pal.get("OldOwnerPlayerUIds") or []
+            is_new_acquisition = pal.get("OwnerPlayerUId") not in old_owners
+        else:
+            is_new_acquisition = False
 
         if not is_new_acquisition:
             continue
