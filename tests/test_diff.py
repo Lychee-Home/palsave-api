@@ -56,6 +56,20 @@ class TestDiffNewPals(unittest.TestCase):
         events = diff_new_pals(old, new)
         self.assertEqual(len(events), 1)
 
+    def test_palbox_reclaim_not_counted_as_new(self):
+        # Moving a pal to the Palbox and back can null OwnerPlayerUId in
+        # between snapshots, but OldOwnerPlayerUIds already lists the player
+        # reclaiming it -- this is not a fresh wild capture.
+        old = snapshot([entry("a", {
+            "CharacterID": "BOSS_QueenBee", "Level": 42, "LastJumpedLocation": {"x": 1, "y": 2, "z": 3},
+            "OwnerPlayerUId": None, "OldOwnerPlayerUIds": [PLAYER_GUID],
+        })])
+        new = snapshot([entry("a", {
+            "CharacterID": "BOSS_QueenBee", "Level": 42, "LastJumpedLocation": {"x": 1, "y": 2, "z": 3},
+            "OwnerPlayerUId": PLAYER_GUID, "OldOwnerPlayerUIds": [PLAYER_GUID],
+        })])
+        self.assertEqual(diff_new_pals(old, new), [])
+
     def test_players_excluded(self):
         old = snapshot([])
         new = snapshot([entry("a", {"IsPlayer": True, "OwnerPlayerUId": PLAYER_GUID})])
